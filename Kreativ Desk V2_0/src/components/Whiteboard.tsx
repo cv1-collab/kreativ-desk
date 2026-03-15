@@ -3,7 +3,6 @@ import { Stage, Layer, Line, Rect, Circle as KonvaCircle, Text as KonvaText } fr
 import { PenTool, Mic, Square, Circle, Type, Image as ImageIcon, Sparkles, Send, Eraser, CheckCircle2, Loader2, Play, Square as StopIcon, FileAudio, FileText, Download } from 'lucide-react';
 import { cn } from '../utils';
 import { GoogleGenAI } from '@google/genai';
-import { io, Socket } from 'socket.io-client';
 import { useAuth } from '../contexts/AuthContext';
 import { motion } from 'motion/react';
 import { db } from '../firebase';
@@ -20,7 +19,6 @@ export default function Whiteboard() {
   const stageRef = useRef<any>(null);
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
 
   // Audio Recording State
   const [isRecording, setIsRecording] = useState(false);
@@ -33,24 +31,6 @@ export default function Whiteboard() {
   const [isAnalyzingAudio, setIsAnalyzingAudio] = useState(false);
 
   useEffect(() => {
-    // Initialize Socket.IO
-    socketRef.current = io();
-    
-    socketRef.current.emit('join-room', 'global-whiteboard');
-    
-    socketRef.current.on('draw', (data: any) => {
-      if (data.type === 'line') {
-        setLines(prev => [...prev, data.item]);
-      } else if (data.type === 'shape') {
-        setShapes(prev => [...prev, data.item]);
-      }
-    });
-
-    socketRef.current.on('clear-board', () => {
-      setLines([]);
-      setShapes([]);
-    });
-
     if (currentUser && db && currentUser.uid !== 'demo-user') {
       const q = query(collection(db, 'audioNotes'), where('ownerId', '==', currentUser.uid));
       const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -74,9 +54,6 @@ export default function Whiteboard() {
     
     return () => {
       window.removeEventListener('resize', checkSize);
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
     };
   }, [currentUser]);
 
@@ -96,7 +73,6 @@ export default function Whiteboard() {
       if (text) {
         const newText = { type: 'text', x: pos.x, y: pos.y, text, id: Date.now().toString() };
         setShapes([...shapes, newText]);
-        socketRef.current?.emit('draw', { roomId: 'global-whiteboard', type: 'shape', item: newText });
       }
       isDrawing.current = false;
     }
@@ -129,20 +105,11 @@ export default function Whiteboard() {
 
   const handleMouseUp = () => {
     isDrawing.current = false;
-    // Emit the finished shape/line to other clients
-    if (tool === 'pen' || tool === 'eraser') {
-      const lastLine = lines[lines.length - 1];
-      if (lastLine) socketRef.current?.emit('draw', { roomId: 'global-whiteboard', type: 'line', item: lastLine });
-    } else if (tool === 'rect' || tool === 'circle') {
-      const lastShape = shapes[shapes.length - 1];
-      if (lastShape) socketRef.current?.emit('draw', { roomId: 'global-whiteboard', type: 'shape', item: lastShape });
-    }
   };
 
   const clearBoard = () => {
     setLines([]);
     setShapes([]);
-    socketRef.current?.emit('clear-board', 'global-whiteboard');
   };
 
   const handleExport = () => {

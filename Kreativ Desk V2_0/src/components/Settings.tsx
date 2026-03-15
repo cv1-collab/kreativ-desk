@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { User, Mail, Lock, CreditCard, Shield, Camera, Loader2, CheckCircle2 } from 'lucide-react';
 import { updateProfile, updatePassword, sendEmailVerification } from 'firebase/auth';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '../firebase';
 
 export default function Settings() {
   const { currentUser } = useAuth();
@@ -56,23 +58,12 @@ export default function Settings() {
       setProfileMessage('');
       setIsSavingProfile(true);
 
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('ownerId', currentUser.uid);
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to upload image');
-      }
-
-      const data = await response.json();
+      const storageRef = ref(storage, `profiles/${currentUser.uid}/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
       
       await updateProfile(currentUser, {
-        photoURL: data.url
+        photoURL: url
       });
 
       setProfileMessage('Profile picture updated successfully.');
